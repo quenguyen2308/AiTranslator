@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Disabled state: uniform pill shape with dimmed colors, no inner box -->
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="#804F46E5"
+                android:endColor="#807C3AED"
+                android:type="linear" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+    <!-- Enabled state with ripple -->
+    <item>
+        <ripple android:color="#40FFFFFF">
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient
+                        android:angle="0"
+                        android:startColor="@color/primary_indigo"
+                        android:endColor="@color/accent_violet"
+                        android:type="linear" />
+                    <corners android:radius="18dp" />
+                </shape>
+            </item>
+        </ripple>
+    </item>
+</selector>

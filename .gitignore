@@ -1,0 +1,38 @@
+# Built application files
+*.apk
+*.aar
+*.aab
+*.ap_
+/AiTranslator_apk/
+
+# Gradle files
+.gradle/
+build/
+app/build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log files
+*.log
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.kotlin/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services
+google-services.json
+
+# Profiler & Native
+captures/
+.externalNativeBuild
+.cxx
