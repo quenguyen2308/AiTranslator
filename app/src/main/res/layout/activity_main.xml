@@ -477,19 +477,6 @@
                         android:padding="6dp"
                         android:scaleType="fitCenter"
                         android:visibility="gone" />
-
-                    <!-- Quick Clear Result Button -->
-                    <ImageButton
-                        android:id="@+id/btnClearResult"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="6dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:src="@drawable/ic_trash"
-                        android:contentDescription="Xóa kết quả"
-                        android:padding="6dp"
-                        android:scaleType="fitCenter"
-                        android:visibility="gone" />
                 </LinearLayout>
 
                 <!-- Result Box (Full height, expands with content, no internal scroll) -->
@@ -510,7 +497,21 @@
                         android:textColor="@color/text_primary"
                         android:textSize="15sp"
                         android:lineSpacingExtra="5dp"
+                        android:paddingEnd="32dp"
                         android:textIsSelectable="true" />
+
+                    <!-- Clear Result Icon (Same style & position as in text input box) -->
+                    <ImageButton
+                        android:id="@+id/btnClearResult"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="top|end"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_clear_text"
+                        android:contentDescription="Xóa kết quả"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
+                        android:visibility="gone" />
                 </FrameLayout>
 
                 <!-- Result Status Footer -->
