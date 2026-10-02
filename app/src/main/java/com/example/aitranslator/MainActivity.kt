@@ -109,6 +109,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResult: TextView
     private lateinit var btnCopyResult: Button
     private lateinit var btnShareResult: ImageButton
+    private lateinit var btnClearResult: ImageButton
     private lateinit var layoutResultMeta: View
     private lateinit var tvResultModel: TextView
     private lateinit var tvResultSpeed: TextView
@@ -226,6 +227,7 @@ class MainActivity : AppCompatActivity() {
         tvResult = findViewById(R.id.tvResult)
         btnCopyResult = findViewById(R.id.btnCopyResult)
         btnShareResult = findViewById(R.id.btnShareResult)
+        btnClearResult = findViewById(R.id.btnClearResult)
         layoutResultMeta = findViewById(R.id.layoutResultMeta)
         tvResultModel = findViewById(R.id.tvResultModel)
         tvResultSpeed = findViewById(R.id.tvResultSpeed)
@@ -284,6 +286,11 @@ class MainActivity : AppCompatActivity() {
         // Share result
         btnShareResult.setOnClickListener {
             shareResult()
+        }
+
+        // Clear result
+        btnClearResult.setOnClickListener {
+            clearResult()
         }
 
         // Send translation
@@ -480,6 +487,15 @@ class MainActivity : AppCompatActivity() {
             }
             startActivity(Intent.createChooser(shareIntent, "Chia sẻ bản dịch qua:"))
         }
+    }
+
+    private fun clearResult() {
+        lastResultText = null
+        tvResult.text = ""
+        btnCopyResult.visibility = View.GONE
+        btnShareResult.visibility = View.GONE
+        btnClearResult.visibility = View.GONE
+        layoutResultMeta.visibility = View.GONE
     }
 
     private fun getSecurePrefs(): SharedPreferences {
@@ -968,6 +984,7 @@ class MainActivity : AppCompatActivity() {
         setTranslatingState(true)
         btnCopyResult.visibility = View.GONE
         btnShareResult.visibility = View.GONE
+        btnClearResult.visibility = View.GONE
         layoutResultMeta.visibility = View.GONE
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -1035,6 +1052,7 @@ class MainActivity : AppCompatActivity() {
                             tvResult.text = resultText
                             btnCopyResult.visibility = View.VISIBLE
                             btnShareResult.visibility = View.VISIBLE
+                            btnClearResult.visibility = View.VISIBLE
                             layoutResultMeta.visibility = View.VISIBLE
                             tvResultModel.text = "$modelName • Key $keyNumber"
                             tvResultSpeed.text = "⚡ ${String.format("%.1fs", elapsedSeconds)}"
@@ -1059,6 +1077,7 @@ class MainActivity : AppCompatActivity() {
                         errorMsg.contains("Unable to resolve host") || errorMsg.contains("timeout")) {
                         withContext(Dispatchers.Main) {
                             setTranslatingState(false)
+                            btnClearResult.visibility = View.VISIBLE
                             tvResult.text = "❌ Lỗi mạng: Không thể kết nối tới Google AI. Vui lòng kiểm tra lại kết nối Internet!"
                         }
                         return@launch
@@ -1097,6 +1116,7 @@ class MainActivity : AppCompatActivity() {
             // All keys failed
             withContext(Dispatchers.Main) {
                 setTranslatingState(false)
+                btnClearResult.visibility = View.VISIBLE
                 val errMsg = lastError?.message ?: lastError?.toString() ?: "Unknown error"
                 tvResult.text = "❌ Tất cả API Keys (${apiKeys.size} keys) đều thất bại:\n\n$errMsg"
             }
