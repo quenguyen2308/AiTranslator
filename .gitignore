@@ -1,9 +1,7 @@
 # Built application files
-*.apk
 *.aar
 *.aab
 *.ap_
-/AiTranslator_apk/
 
 # Gradle files
 .gradle/
