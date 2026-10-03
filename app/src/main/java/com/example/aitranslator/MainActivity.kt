@@ -21,11 +21,13 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
@@ -54,8 +56,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnPaste: Button
     private lateinit var btnClearAll: Button
     private lateinit var layoutImagePreview: View
-    private lateinit var ivSelectedImage: ImageView
-    private lateinit var btnClearImage: ImageButton
+    private lateinit var tvImageCountBadge: TextView
+    private lateinit var btnClearAllImages: TextView
+    private lateinit var layoutThumbnailsContainer: LinearLayout
     private lateinit var btnClearText: ImageButton
     private lateinit var rgTranslationStyle: RadioGroup
     private lateinit var rbStyleAccurate: RadioButton
@@ -115,7 +118,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResultModel: TextView
     private lateinit var tvResultSpeed: TextView
 
-    private var selectedBitmap: Bitmap? = null
+    private val selectedBitmaps = mutableListOf<Bitmap>()
+    private val MAX_IMAGE_COUNT = 5
     private var lastResultText: String? = null
 
     // Multiple API keys support
@@ -149,18 +153,19 @@ class MainActivity : AppCompatActivity() {
 
     private var cachedSecurePrefs: SharedPreferences? = null
 
-    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            val bitmap = decodeSampledBitmapFromUri(uri, maxDim = 1024)
-            if (bitmap != null) {
-                // Free previous bitmap to avoid memory leaks
-                selectedBitmap?.recycle()
-                selectedBitmap = bitmap
-                ivSelectedImage.setImageBitmap(bitmap)
-                layoutImagePreview.visibility = View.VISIBLE
-            } else {
-                Toast.makeText(this, "Không thể đọc hoặc nén ảnh. Vui lòng chọn ảnh khác.", Toast.LENGTH_SHORT).show()
-            }
+    private val pickMultipleMediaLauncher = registerForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(5)
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            addSelectedImages(uris)
+        }
+    }
+
+    private val pickMultipleFilesLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            addSelectedImages(uris)
         }
     }
 
@@ -175,8 +180,9 @@ class MainActivity : AppCompatActivity() {
         btnPaste = findViewById(R.id.btnPaste)
         btnClearAll = findViewById(R.id.btnClearAll)
         layoutImagePreview = findViewById(R.id.layoutImagePreview)
-        ivSelectedImage = findViewById(R.id.ivSelectedImage)
-        btnClearImage = findViewById(R.id.btnClearImage)
+        tvImageCountBadge = findViewById(R.id.tvImageCountBadge)
+        btnClearAllImages = findViewById(R.id.btnClearAllImages)
+        layoutThumbnailsContainer = findViewById(R.id.layoutThumbnailsContainer)
         btnClearText = findViewById(R.id.btnClearText)
         rgTranslationStyle = findViewById(R.id.rgTranslationStyle)
         rbStyleAccurate = findViewById(R.id.rbStyleAccurate)
@@ -248,9 +254,9 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Pick Image
+        // Pick Image (up to 5 images)
         btnPickImage.setOnClickListener {
-            pickImageLauncher.launch("image/*")
+            launchImagePicker()
         }
 
         // Paste from clipboard
@@ -270,14 +276,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Clear all (input text, image, and result)
+        // Clear all (input text, images, and result)
         btnClearAll.setOnClickListener {
             clearAll()
         }
 
-        // Clear image
-        btnClearImage.setOnClickListener {
-            clearSelectedImage()
+        // Clear all images
+        btnClearAllImages.setOnClickListener {
+            clearSelectedImages()
         }
 
         // Settings dialog
@@ -316,7 +322,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            if (textInput.isEmpty() && selectedBitmap == null) {
+            if (textInput.isEmpty() && selectedBitmaps.isEmpty()) {
                 Toast.makeText(this, "Vui lòng nhập văn bản hoặc chọn ảnh cần dịch!", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -335,7 +341,7 @@ class MainActivity : AppCompatActivity() {
                 nestedScrollViewMain.smoothScrollTo(0, cardResult.top)
             }
 
-            callGeminiApi(textInput, selectedBitmap)
+            callGeminiApi(textInput, selectedBitmaps.toList())
         }
 
         handleIntent(intent)
@@ -364,13 +370,20 @@ class MainActivity : AppCompatActivity() {
                     intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
                 }
                 if (imageUri != null) {
-                    val bitmap = decodeSampledBitmapFromUri(imageUri, maxDim = 1024)
-                    if (bitmap != null) {
-                        selectedBitmap?.recycle()
-                        selectedBitmap = bitmap
-                        ivSelectedImage.setImageBitmap(bitmap)
-                        layoutImagePreview.visibility = View.VISIBLE
-                    }
+                    addSelectedImages(listOf(imageUri))
+                }
+            }
+        } else if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            val mimeType = intent.type ?: ""
+            if (mimeType.startsWith("image/")) {
+                val imageUris = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                }
+                if (!imageUris.isNullOrEmpty()) {
+                    addSelectedImages(imageUris)
                 }
             }
         }
@@ -378,8 +391,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        selectedBitmap?.recycle()
-        selectedBitmap = null
+        for (bitmap in selectedBitmaps) {
+            bitmap.recycle()
+        }
+        selectedBitmaps.clear()
         modelCache.clear()
     }
 
@@ -466,11 +481,136 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun clearSelectedImage() {
-        selectedBitmap?.recycle()
-        selectedBitmap = null
-        ivSelectedImage.setImageDrawable(null)
-        layoutImagePreview.visibility = View.GONE
+    private fun launchImagePicker() {
+        val remaining = MAX_IMAGE_COUNT - selectedBitmaps.size
+        if (remaining <= 0) {
+            Toast.makeText(this, "Đã chọn tối đa $MAX_IMAGE_COUNT ảnh. Hãy xóa bớt nếu muốn thêm ảnh mới.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            pickMultipleMediaLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (e: Exception) {
+            try {
+                pickMultipleFilesLauncher.launch("image/*")
+            } catch (e2: Exception) {
+                Toast.makeText(this, "Không thể mở bộ chọn ảnh trên thiết bị.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun addSelectedImages(uris: List<Uri>) {
+        val remaining = MAX_IMAGE_COUNT - selectedBitmaps.size
+        if (remaining <= 0) {
+            Toast.makeText(this, "Đã chọn tối đa $MAX_IMAGE_COUNT ảnh.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val urisToProcess = uris.take(remaining)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val loadedBitmaps = mutableListOf<Bitmap>()
+            for (uri in urisToProcess) {
+                val bitmap = decodeSampledBitmapFromUri(uri, maxDim = 1024)
+                if (bitmap != null) {
+                    loadedBitmaps.add(bitmap)
+                }
+            }
+            withContext(Dispatchers.Main) {
+                if (loadedBitmaps.isNotEmpty()) {
+                    selectedBitmaps.addAll(loadedBitmaps)
+                    updateImagePreviews()
+                    if (uris.size > remaining) {
+                        Toast.makeText(this@MainActivity, "Đã thêm ${loadedBitmaps.size} ảnh (tối đa $MAX_IMAGE_COUNT ảnh).", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this@MainActivity, "Không thể đọc hoặc nén ảnh đã chọn.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun updateImagePreviews() {
+        if (selectedBitmaps.isEmpty()) {
+            layoutImagePreview.visibility = View.GONE
+            layoutThumbnailsContainer.removeAllViews()
+            return
+        }
+
+        layoutImagePreview.visibility = View.VISIBLE
+        tvImageCountBadge.text = "${selectedBitmaps.size}/$MAX_IMAGE_COUNT"
+        layoutThumbnailsContainer.removeAllViews()
+
+        val inflater = LayoutInflater.from(this)
+
+        for ((index, bitmap) in selectedBitmaps.withIndex()) {
+            val itemView = inflater.inflate(R.layout.item_selected_image, layoutThumbnailsContainer, false)
+            val ivThumbnail = itemView.findViewById<ImageView>(R.id.ivThumbnail)
+            val tvIndex = itemView.findViewById<TextView>(R.id.tvThumbnailIndex)
+            val btnRemove = itemView.findViewById<ImageButton>(R.id.btnRemoveThumbnail)
+            val cardThumbnail = itemView.findViewById<View>(R.id.cardThumbnail)
+
+            ivThumbnail.setImageBitmap(bitmap)
+            tvIndex.text = "#${index + 1}"
+
+            btnRemove.setOnClickListener {
+                removeSelectedImageAt(index)
+            }
+
+            cardThumbnail.setOnClickListener {
+                showImagePreviewDialog(bitmap, index + 1)
+            }
+
+            layoutThumbnailsContainer.addView(itemView)
+        }
+
+        // Add '+ Thêm' slot if not full
+        if (selectedBitmaps.size < MAX_IMAGE_COUNT) {
+            val addSlotView = inflater.inflate(R.layout.item_add_image_slot, layoutThumbnailsContainer, false)
+            addSlotView.setOnClickListener {
+                launchImagePicker()
+            }
+            layoutThumbnailsContainer.addView(addSlotView)
+        }
+    }
+
+    private fun showImagePreviewDialog(bitmap: Bitmap, index: Int) {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Ảnh #$index")
+            .setPositiveButton("Đóng", null)
+            .setNegativeButton("Xóa ảnh này") { _, _ ->
+                val actualIndex = index - 1
+                if (actualIndex in selectedBitmaps.indices) {
+                    removeSelectedImageAt(actualIndex)
+                }
+            }
+            .create()
+
+        val iv = ImageView(this).apply {
+            setImageBitmap(bitmap)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(16, 16, 16, 16)
+        }
+        dialog.setView(iv)
+        dialog.show()
+    }
+
+    private fun removeSelectedImageAt(index: Int) {
+        if (index in selectedBitmaps.indices) {
+            val removed = selectedBitmaps.removeAt(index)
+            removed.recycle()
+            updateImagePreviews()
+        }
+    }
+
+    private fun clearSelectedImages() {
+        for (bitmap in selectedBitmaps) {
+            bitmap.recycle()
+        }
+        selectedBitmaps.clear()
+        updateImagePreviews()
     }
 
     private fun copyResultToClipboard() {
@@ -498,7 +638,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun clearAll() {
         etInputText.setText("")
-        clearSelectedImage()
+        clearSelectedImages()
         clearResult()
     }
 
@@ -980,6 +1120,7 @@ class MainActivity : AppCompatActivity() {
             btnPickImage.isEnabled = false
             btnPaste.isEnabled = false
             btnClearAll.isEnabled = false
+            btnClearAllImages.isEnabled = false
             btnSend.text = ""
             layoutBtnLoading.visibility = View.VISIBLE
         } else {
@@ -987,12 +1128,13 @@ class MainActivity : AppCompatActivity() {
             btnPickImage.isEnabled = true
             btnPaste.isEnabled = true
             btnClearAll.isEnabled = true
+            btnClearAllImages.isEnabled = true
             btnSend.text = "✨  Dịch với Gemini AI"
             layoutBtnLoading.visibility = View.GONE
         }
     }
 
-    private fun callGeminiApi(input: String, bitmap: Bitmap?) {
+    private fun callGeminiApi(input: String, bitmaps: List<Bitmap>) {
         val startTime = System.currentTimeMillis()
 
         tvResult.text = "Đang xử lý dịch thuật..."
@@ -1011,18 +1153,36 @@ class MainActivity : AppCompatActivity() {
             val sourceClause = if (currentSourceLang.contains("Tự động")) "" else "từ $sourceClean "
 
             val isPoetic = isPoeticStyle
+            val hasImages = bitmaps.isNotEmpty()
+            val imgCount = bitmaps.size
             val prompt = when {
-                bitmap != null && input.isNotEmpty() ->
+                hasImages && input.isNotEmpty() ->
                     if (isPoetic) {
-                        "Dựa vào hình ảnh đính kèm và yêu cầu sau: \"$input\", hãy dịch ${sourceClause}sang $targetClean với văn phong hoa mỹ, trau chuốt, giàu cảm xúc và chất thơ. Hãy gợi ý 2-3 phương án dịch hay nhất theo từng sắc thái ngữ cảnh (nhẹ nhàng, lãng mạn, sâu lắng) kèm chú thích ngắn gọn."
+                        if (imgCount > 1) {
+                            "Dựa vào $imgCount hình ảnh đính kèm (theo thứ tự từ ảnh 1 đến ảnh $imgCount) và yêu cầu sau: \"$input\", hãy dịch đầy đủ nội dung ${sourceClause}sang $targetClean với văn phong hoa mỹ, trau chuốt, giàu cảm xúc và chất thơ. Hãy gợi ý 2-3 phương án dịch hay nhất theo từng sắc thái ngữ cảnh kèm chú thích ngắn gọn."
+                        } else {
+                            "Dựa vào hình ảnh đính kèm và yêu cầu sau: \"$input\", hãy dịch ${sourceClause}sang $targetClean với văn phong hoa mỹ, trau chuốt, giàu cảm xúc và chất thơ. Hãy gợi ý 2-3 phương án dịch hay nhất theo từng sắc thái ngữ cảnh (nhẹ nhàng, lãng mạn, sâu lắng) kèm chú thích ngắn gọn."
+                        }
                     } else {
-                        "Dựa vào hình ảnh đính kèm và yêu cầu bổ sung sau: \"$input\", hãy dịch nội dung ${sourceClause}sang $targetClean. YÊU CẦU QUAN TRỌNG: Chỉ cung cấp DUY NHẤT một bản dịch $targetClean chuẩn xác, tự nhiên, đúng nghĩa nhất. KHÔNG giải thích, KHÔNG phân tích từ ngữ, KHÔNG thêm lời bình hay nhiều phương án."
+                        if (imgCount > 1) {
+                            "Dựa vào $imgCount hình ảnh đính kèm (theo thứ tự từ ảnh 1 đến ảnh $imgCount) và yêu cầu bổ sung sau: \"$input\", hãy dịch toàn bộ nội dung ${sourceClause}sang $targetClean. YÊU CẦU QUAN TRỌNG: Dịch đầy đủ nội dung theo đúng thứ tự các ảnh. Chỉ cung cấp DUY NHẤT một bản dịch $targetClean chuẩn xác, tự nhiên, đúng nghĩa nhất. KHÔNG giải thích, KHÔNG phân tích từ ngữ, KHÔNG thêm lời bình hay nhiều phương án."
+                        } else {
+                            "Dựa vào hình ảnh đính kèm và yêu cầu bổ sung sau: \"$input\", hãy dịch nội dung ${sourceClause}sang $targetClean. YÊU CẦU QUAN TRỌNG: Chỉ cung cấp DUY NHẤT một bản dịch $targetClean chuẩn xác, tự nhiên, đúng nghĩa nhất. KHÔNG giải thích, KHÔNG phân tích từ ngữ, KHÔNG thêm lời bình hay nhiều phương án."
+                        }
                     }
-                bitmap != null ->
+                hasImages ->
                     if (isPoetic) {
-                        "Hãy nhận diện chữ (OCR) trong ảnh và dịch ${sourceClause}sang $targetClean với văn phong hoa mỹ, truyền cảm và tinh tế nhất. Gợi ý các phương án dịch hay theo ngữ cảnh kèm giải thích sắc thái từ ngữ."
+                        if (imgCount > 1) {
+                            "Hãy nhận diện toàn bộ chữ (OCR) trong $imgCount hình ảnh đính kèm theo thứ tự từ ảnh 1 đến ảnh $imgCount và dịch ${sourceClause}sang $targetClean với văn phong hoa mỹ, truyền cảm và tinh tế nhất. Gợi ý các phương án dịch hay theo ngữ cảnh kèm giải thích sắc thái từ ngữ."
+                        } else {
+                            "Hãy nhận diện chữ (OCR) trong ảnh và dịch ${sourceClause}sang $targetClean với văn phong hoa mỹ, truyền cảm và tinh tế nhất. Gợi ý các phương án dịch hay theo ngữ cảnh kèm giải thích sắc thái từ ngữ."
+                        }
                     } else {
-                        "Hãy nhận diện toàn bộ chữ (OCR) trong ảnh và dịch trực tiếp ${sourceClause}sang $targetClean. YÊU CẦU QUAN TRỌNG: Chỉ trả về DUY NHẤT nội dung bản dịch $targetClean chuẩn xác, tự nhiên và đầy đủ nhất. KHÔNG giải thích, KHÔNG phân tích từ ngữ, KHÔNG thêm ghi chú bên lề."
+                        if (imgCount > 1) {
+                            "Hãy nhận diện toàn bộ chữ (OCR) trong $imgCount hình ảnh đính kèm theo thứ tự từ ảnh 1 đến ảnh $imgCount và dịch trực tiếp ${sourceClause}sang $targetClean. YÊU CẦU QUAN TRỌNG: Dịch đầy đủ nội dung theo đúng thứ tự các ảnh. Chỉ trả về DUY NHẤT nội dung bản dịch $targetClean chuẩn xác, tự nhiên và đầy đủ nhất. KHÔNG giải thích, KHÔNG phân tích từ ngữ, KHÔNG thêm ghi chú bên lề."
+                        } else {
+                            "Hãy nhận diện toàn bộ chữ (OCR) trong ảnh và dịch trực tiếp ${sourceClause}sang $targetClean. YÊU CẦU QUAN TRỌNG: Chỉ trả về DUY NHẤT nội dung bản dịch $targetClean chuẩn xác, tự nhiên và đầy đủ nhất. KHÔNG giải thích, KHÔNG phân tích từ ngữ, KHÔNG thêm ghi chú bên lề."
+                        }
                     }
                 else ->
                     if (isPoetic) {
@@ -1046,9 +1206,11 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val generativeModel = getModel(apiKey, modelName)
 
-                    val response = if (bitmap != null) {
+                    val response = if (hasImages) {
                         val inputContent = content {
-                            image(bitmap)
+                            for (bitmap in bitmaps) {
+                                image(bitmap)
+                            }
                             text(prompt)
                         }
                         generativeModel.generateContent(inputContent)

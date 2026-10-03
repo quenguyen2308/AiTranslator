@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="66dp"
+    android:layout_height="66dp"
+    android:layout_marginEnd="8dp">
+
+    <!-- Card containing the thumbnail -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardThumbnail"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|start"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="@color/border_subtle">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/ivThumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="Ảnh OCR đã chọn" />
+
+            <TextView
+                android:id="@+id/tvThumbnailIndex"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|start"
+                android:layout_margin="3dp"
+                android:background="@drawable/bg_badge_index"
+                android:paddingHorizontal="4dp"
+                android:paddingVertical="1dp"
+                android:text="#1"
+                android:textColor="#FFFFFF"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Close button floating at top-right -->
+    <ImageButton
+        android:id="@+id/btnRemoveThumbnail"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="top|end"
+        android:background="@drawable/bg_circle_close"
+        android:src="@drawable/ic_close_white"
+        android:padding="4dp"
+        android:scaleType="fitCenter"
+        android:contentDescription="Xóa ảnh này" />
+</FrameLayout>

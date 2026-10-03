@@ -199,64 +199,92 @@
                         android:visibility="gone" />
                 </RelativeLayout>
 
-                <!-- Selected Image Preview Chip (if selected) -->
-                <RelativeLayout
+                <!-- Selected Images Preview Container (1 to 5 images) -->
+                <LinearLayout
                     android:id="@+id/layoutImagePreview"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:orientation="vertical"
                     android:background="@drawable/bg_chip_indigo"
-                    android:padding="8dp"
+                    android:padding="10dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginBottom="4dp"
                     android:visibility="gone">
 
-                    <ImageView
-                        android:id="@+id/ivSelectedImage"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_alignParentStart="true"
-                        android:layout_centerVertical="true"
-                        android:scaleType="centerCrop"
-                        android:background="@drawable/bg_chip_slate"
-                        android:contentDescription="Ảnh OCR" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
+                    <!-- Header with Title, Count badge and Clear all button -->
+                    <RelativeLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_toEndOf="@id/ivSelectedImage"
-                        android:layout_toStartOf="@id/btnClearImage"
-                        android:layout_centerVertical="true"
-                        android:layout_marginStart="10dp"
-                        android:orientation="vertical">
+                        android:layout_marginBottom="8dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Ảnh đã chọn (OCR)"
-                            android:textColor="@color/text_primary"
-                            android:textSize="12sp"
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Ảnh đã chọn (OCR)"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvImageCountBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:background="@drawable/bg_pill_lang"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="2dp"
+                                android:text="1/5"
+                                android:textColor="@color/primary_indigo"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:text="• Tối đa 5 ảnh"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/btnClearAllImages"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:background="?attr/selectableItemBackground"
+                            android:paddingHorizontal="6dp"
+                            android:paddingVertical="2dp"
+                            android:text="Xóa tất cả"
+                            android:textColor="@color/tag_error"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
+                    </RelativeLayout>
 
-                        <TextView
+                    <!-- Horizontal Scroll View for Thumbnails -->
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none"
+                        android:overScrollMode="never">
+
+                        <LinearLayout
+                            android:id="@+id/layoutThumbnailsContainer"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Đã nén tối ưu (1024px)"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <ImageButton
-                        android:id="@+id/btnClearImage"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:src="@drawable/ic_close"
-                        android:contentDescription="Xóa ảnh"
-                        android:padding="6dp"
-                        android:scaleType="fitCenter" />
-                </RelativeLayout>
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical" />
+                    </HorizontalScrollView>
+                </LinearLayout>
 
                 <!-- Input Footer Toolbar -->
                 <LinearLayout
@@ -274,7 +302,7 @@
                         android:layout_height="36dp"
                         android:background="@drawable/bg_chip_indigo"
                         android:src="@drawable/ic_camera_pill"
-                        android:contentDescription="Chọn ảnh OCR"
+                        android:contentDescription="Chọn ảnh OCR (tối đa 5 ảnh)"
                         android:padding="8dp"
                         android:scaleType="fitCenter" />
 
