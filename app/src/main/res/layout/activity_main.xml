@@ -267,21 +267,16 @@
                     android:paddingTop="10dp"
                     android:layout_marginTop="6dp">
 
-                    <!-- Button: Pick Image OCR -->
-                    <androidx.appcompat.widget.AppCompatButton
+                    <!-- Button: Pick Image OCR (Icon only) -->
+                    <ImageButton
                         android:id="@+id/btnPickImage"
-                        android:layout_width="wrap_content"
+                        android:layout_width="36dp"
                         android:layout_height="36dp"
                         android:background="@drawable/bg_chip_indigo"
-                        app:backgroundTint="@null"
-                        android:text="Chọn ảnh OCR"
-                        android:textColor="@color/primary_indigo_dark"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:drawableStart="@drawable/ic_camera_pill"
-                        android:drawablePadding="6dp"
-                        android:paddingHorizontal="12dp"
-                        android:stateListAnimator="@null" />
+                        android:src="@drawable/ic_camera_pill"
+                        android:contentDescription="Chọn ảnh OCR"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter" />
 
                     <!-- Button: Paste from Clipboard -->
                     <androidx.appcompat.widget.AppCompatButton
@@ -292,12 +287,31 @@
                         android:background="@drawable/bg_chip_slate"
                         app:backgroundTint="@null"
                         android:text="Dán"
+                        android:textAllCaps="false"
                         android:textColor="#1E293B"
                         android:textSize="12sp"
                         android:textStyle="bold"
                         android:drawableStart="@drawable/ic_paste"
                         android:drawablePadding="6dp"
                         android:paddingHorizontal="12dp"
+                        android:stateListAnimator="@null" />
+
+                    <!-- Button: Clear All (Input & Result) -->
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnClearAll"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_chip_slate"
+                        app:backgroundTint="@null"
+                        android:text="Xóa tất cả"
+                        android:textAllCaps="false"
+                        android:textColor="#1E293B"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:drawableStart="@drawable/ic_clear_text"
+                        android:drawablePadding="6dp"
+                        android:paddingHorizontal="10dp"
                         android:stateListAnimator="@null" />
 
                     <!-- Character Counter -->

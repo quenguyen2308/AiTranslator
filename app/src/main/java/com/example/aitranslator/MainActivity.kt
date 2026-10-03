@@ -50,8 +50,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvActiveModel: TextView
     private lateinit var etInputText: EditText
     private lateinit var tvCharCount: TextView
-    private lateinit var btnPickImage: Button
+    private lateinit var btnPickImage: ImageButton
     private lateinit var btnPaste: Button
+    private lateinit var btnClearAll: Button
     private lateinit var layoutImagePreview: View
     private lateinit var ivSelectedImage: ImageView
     private lateinit var btnClearImage: ImageButton
@@ -172,6 +173,7 @@ class MainActivity : AppCompatActivity() {
         tvCharCount = findViewById(R.id.tvCharCount)
         btnPickImage = findViewById(R.id.btnPickImage)
         btnPaste = findViewById(R.id.btnPaste)
+        btnClearAll = findViewById(R.id.btnClearAll)
         layoutImagePreview = findViewById(R.id.layoutImagePreview)
         ivSelectedImage = findViewById(R.id.ivSelectedImage)
         btnClearImage = findViewById(R.id.btnClearImage)
@@ -266,6 +268,11 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "Bộ nhớ tạm trống!", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        // Clear all (input text, image, and result)
+        btnClearAll.setOnClickListener {
+            clearAll()
         }
 
         // Clear image
@@ -487,6 +494,12 @@ class MainActivity : AppCompatActivity() {
             }
             startActivity(Intent.createChooser(shareIntent, "Chia sẻ bản dịch qua:"))
         }
+    }
+
+    private fun clearAll() {
+        etInputText.setText("")
+        clearSelectedImage()
+        clearResult()
     }
 
     private fun clearResult() {
@@ -966,12 +979,14 @@ class MainActivity : AppCompatActivity() {
             btnSend.isEnabled = false
             btnPickImage.isEnabled = false
             btnPaste.isEnabled = false
+            btnClearAll.isEnabled = false
             btnSend.text = ""
             layoutBtnLoading.visibility = View.VISIBLE
         } else {
             btnSend.isEnabled = true
             btnPickImage.isEnabled = true
             btnPaste.isEnabled = true
+            btnClearAll.isEnabled = true
             btnSend.text = "✨  Dịch với Gemini AI"
             layoutBtnLoading.visibility = View.GONE
         }
