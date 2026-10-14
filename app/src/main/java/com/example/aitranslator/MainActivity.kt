@@ -1,5 +1,6 @@
 package com.example.aitranslator
 
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,6 +16,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -169,6 +171,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -254,6 +257,18 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
+        // Cho phép cuộn nội dung bên trong etInputText khi văn bản dài mà không bị NestedScrollView cuộn mất nút dịch
+        etInputText.setOnTouchListener { view, motionEvent ->
+            if (view.canScrollVertically(1) || view.canScrollVertically(-1)) {
+                view.parent.requestDisallowInterceptTouchEvent(true)
+                if (motionEvent.action and MotionEvent.ACTION_MASK == MotionEvent.ACTION_UP ||
+                    motionEvent.action and MotionEvent.ACTION_MASK == MotionEvent.ACTION_CANCEL) {
+                    view.parent.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            false
+        }
+
         // Pick Image (up to 5 images)
         btnPickImage.setOnClickListener {
             launchImagePicker()
@@ -267,7 +282,15 @@ class MainActivity : AppCompatActivity() {
                 val text = clip.getItemAt(0).text?.toString() ?: ""
                 if (text.isNotEmpty()) {
                     etInputText.setText(text)
-                    etInputText.setSelection(text.length)
+                    if (text.length > 200 || text.contains("\n")) {
+                        etInputText.setSelection(0)
+                        etInputText.scrollTo(0, 0)
+                    } else {
+                        etInputText.setSelection(text.length)
+                    }
+                    nestedScrollViewMain.post {
+                        nestedScrollViewMain.smoothScrollTo(0, 0)
+                    }
                 } else {
                     Toast.makeText(this, "Bộ nhớ tạm không có văn bản!", Toast.LENGTH_SHORT).show()
                 }
@@ -360,7 +383,15 @@ class MainActivity : AppCompatActivity() {
                 val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
                 if (!sharedText.isNullOrBlank()) {
                     etInputText.setText(sharedText)
-                    etInputText.setSelection(sharedText.length)
+                    if (sharedText.length > 200 || sharedText.contains("\n")) {
+                        etInputText.setSelection(0)
+                        etInputText.scrollTo(0, 0)
+                    } else {
+                        etInputText.setSelection(sharedText.length)
+                    }
+                    nestedScrollViewMain.post {
+                        nestedScrollViewMain.smoothScrollTo(0, 0)
+                    }
                 }
             } else if (mimeType.startsWith("image/")) {
                 val imageUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
