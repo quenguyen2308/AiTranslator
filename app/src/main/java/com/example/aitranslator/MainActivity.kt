@@ -38,9 +38,21 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
+import com.google.ai.client.generativeai.type.generationConfig
+import com.google.ai.client.generativeai.type.SafetySetting
+import com.google.ai.client.generativeai.type.HarmCategory
+import com.google.ai.client.generativeai.type.BlockThreshold
+import com.google.ai.client.generativeai.type.RequestOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import java.io.File
+import androidx.core.content.FileProvider
+import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.switchmaterial.SwitchMaterial
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -55,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etInputText: EditText
     private lateinit var tvCharCount: TextView
     private lateinit var btnPickImage: ImageButton
+    private lateinit var btnTakePhoto: ImageButton
     private lateinit var btnPaste: Button
     private lateinit var btnClearAll: Button
     private lateinit var layoutImagePreview: View
@@ -146,14 +159,32 @@ class MainActivity : AppCompatActivity() {
     private val KEY_MODEL_3_NAME = "MODEL_3_NAME"
     private val KEY_MODEL_3_ENABLED = "MODEL_3_ENABLED"
 
-    private var model1Name = "gemini-3.5-flash"
+    private var model1Name = "gemini-3.5-flash-lite"
     private var model1Enabled = true
-    private var model2Name = "gemini-3.5-flash-lite"
+    private var model2Name = "gemini-3.8-flash"
     private var model2Enabled = true
-    private var model3Name = "gemini-3.8-flash"
+    private var model3Name = "gemini-3.5-flash"
     private var model3Enabled = true
 
     private var cachedSecurePrefs: SharedPreferences? = null
+
+    private var cameraPhotoUri: Uri? = null
+    private var lastHandledClipboardText: String? = null
+
+    private val KEY_FEATURE_PROCESS_TEXT = "FEATURE_PROCESS_TEXT"
+    private val KEY_FEATURE_CAMERA = "FEATURE_CAMERA"
+    private val KEY_FEATURE_AUTO_CLIPBOARD = "FEATURE_AUTO_CLIPBOARD"
+    private var isFeatureProcessTextEnabled = true
+    private var isFeatureCameraEnabled = true
+    private var isFeatureAutoClipboardEnabled = true
+
+    private val takePhotoLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && cameraPhotoUri != null) {
+            addSelectedImages(listOf(cameraPhotoUri!!))
+        }
+    }
 
     private val pickMultipleMediaLauncher = registerForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(5)
@@ -180,6 +211,7 @@ class MainActivity : AppCompatActivity() {
         etInputText = findViewById(R.id.etInputText)
         tvCharCount = findViewById(R.id.tvCharCount)
         btnPickImage = findViewById(R.id.btnPickImage)
+        btnTakePhoto = findViewById(R.id.btnTakePhoto)
         btnPaste = findViewById(R.id.btnPaste)
         btnClearAll = findViewById(R.id.btnClearAll)
         layoutImagePreview = findViewById(R.id.layoutImagePreview)
@@ -269,9 +301,14 @@ class MainActivity : AppCompatActivity() {
             false
         }
 
-        // Pick Image (up to 5 images)
+        // Pick Image from Gallery (up to 5 images)
         btnPickImage.setOnClickListener {
             launchImagePicker()
+        }
+
+        // Take photo from Camera
+        btnTakePhoto.setOnClickListener {
+            launchCamera()
         }
 
         // Paste from clipboard
@@ -417,6 +454,85 @@ class MainActivity : AppCompatActivity() {
                     addSelectedImages(imageUris)
                 }
             }
+        } else if (intent.action == Intent.ACTION_PROCESS_TEXT) {
+            if (isFeatureProcessTextEnabled) {
+                val text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
+                if (!text.isNullOrBlank()) {
+                    etInputText.setText(text)
+                    if (text.length > 200 || text.contains("\n")) {
+                        etInputText.setSelection(0)
+                        etInputText.scrollTo(0, 0)
+                    } else {
+                        etInputText.setSelection(text.length)
+                    }
+                    nestedScrollViewMain.post {
+                        nestedScrollViewMain.smoothScrollTo(0, 0)
+                    }
+                    if (apiKeys.isNotEmpty()) {
+                        btnSend.post {
+                            btnSend.performClick()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        window.decorView.post {
+            checkClipboardForTranslation()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            checkClipboardForTranslation()
+        }
+    }
+
+    private fun checkClipboardForTranslation() {
+        if (!isFeatureAutoClipboardEnabled) return
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            val clip = clipboard.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0).text?.toString()?.trim() ?: ""
+                val currentText = etInputText.text.toString().trim()
+                if (text.isNotEmpty() && text != lastHandledClipboardText && text != currentText) {
+                    val preview = if (text.length > 36) text.take(33) + "..." else text
+                    Snackbar.make(
+                        findViewById(android.R.id.content),
+                        "📋 Bộ nhớ tạm: \"$preview\"",
+                        Snackbar.LENGTH_LONG
+                    ).setAction("DÁN & DỊCH") {
+                        etInputText.setText(text)
+                        etInputText.setSelection(text.length)
+                        lastHandledClipboardText = text
+                        btnSend.post {
+                            btnSend.performClick()
+                        }
+                    }.show()
+                    lastHandledClipboardText = text
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun updateProcessTextComponentState(enabled: Boolean) {
+        try {
+            val componentName = ComponentName(this, "$packageName.ProcessTextActivity")
+            packageManager.setComponentEnabledSetting(
+                componentName,
+                if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -532,6 +648,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun launchCamera() {
+        val remaining = MAX_IMAGE_COUNT - selectedBitmaps.size
+        if (remaining <= 0) {
+            Toast.makeText(this, "Đã chọn tối đa $MAX_IMAGE_COUNT ảnh. Hãy xóa bớt trước khi chụp ảnh mới.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            val photoFile = File.createTempFile("cam_${System.currentTimeMillis()}_", ".jpg", cacheDir)
+            val photoUri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", photoFile)
+            cameraPhotoUri = photoUri
+            takePhotoLauncher.launch(photoUri)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Không thể khởi động camera: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun addSelectedImages(uris: List<Uri>) {
         val remaining = MAX_IMAGE_COUNT - selectedBitmaps.size
         if (remaining <= 0) {
@@ -600,7 +733,16 @@ class MainActivity : AppCompatActivity() {
         if (selectedBitmaps.size < MAX_IMAGE_COUNT) {
             val addSlotView = inflater.inflate(R.layout.item_add_image_slot, layoutThumbnailsContainer, false)
             addSlotView.setOnClickListener {
-                launchImagePicker()
+                if (isFeatureCameraEnabled) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Thêm ảnh OCR")
+                        .setItems(arrayOf("🖼️ Chọn ảnh từ thư viện", "📷 Chụp ảnh từ Camera")) { _, which ->
+                            if (which == 0) launchImagePicker() else launchCamera()
+                        }
+                        .show()
+                } else {
+                    launchImagePicker()
+                }
             }
             layoutThumbnailsContainer.addView(addSlotView)
         }
@@ -729,36 +871,40 @@ class MainActivity : AppCompatActivity() {
         val savedM3 = prefs.getString(KEY_MODEL_3_NAME, null)
 
         if (savedM1 == null && savedM2 == null && savedM3 == null) {
-            val defaultModels = "gemini-3.5-flash|||gemini-3.5-flash-lite|||gemini-3.8-flash"
+            val defaultModels = "gemini-3.5-flash-lite|||gemini-3.8-flash|||gemini-3.5-flash"
             val modelsString = prefs.getString(KEY_SELECTED_MODELS, defaultModels) ?: defaultModels
             val rawModels = modelsString.split("|||").map { it.trim() }.filter { it.isNotBlank() }
-            model1Name = rawModels.getOrElse(0) { "gemini-3.5-flash" }
-            model2Name = rawModels.getOrElse(1) { "gemini-3.5-flash-lite" }
-            model3Name = rawModels.getOrElse(2) { "gemini-3.8-flash" }
+            model1Name = rawModels.getOrElse(0) { "gemini-3.5-flash-lite" }
+            model2Name = rawModels.getOrElse(1) { "gemini-3.8-flash" }
+            model3Name = rawModels.getOrElse(2) { "gemini-3.5-flash" }
             model1Enabled = true
             model2Enabled = rawModels.size > 1
             model3Enabled = rawModels.size > 2
         } else {
-            model1Name = savedM1 ?: "gemini-3.5-flash"
-            model2Name = savedM2 ?: "gemini-3.5-flash-lite"
-            model3Name = savedM3 ?: "gemini-3.8-flash"
+            model1Name = savedM1 ?: "gemini-3.5-flash-lite"
+            model2Name = savedM2 ?: "gemini-3.8-flash"
+            model3Name = savedM3 ?: "gemini-3.5-flash"
             model1Enabled = prefs.getBoolean(KEY_MODEL_1_ENABLED, true)
             model2Enabled = prefs.getBoolean(KEY_MODEL_2_ENABLED, true)
             model3Enabled = prefs.getBoolean(KEY_MODEL_3_ENABLED, true)
         }
 
         val deprecatedMap = mapOf(
-            "gemini-1.5-flash" to "gemini-3.5-flash",
-            "gemini-1.5-pro" to "gemini-3.5-flash-lite",
-            "gemini-pro" to "gemini-3.5-flash"
+            "gemini-1.5-flash" to "gemini-3.5-flash-lite",
+            "gemini-1.5-pro" to "gemini-3.8-flash",
+            "gemini-pro" to "gemini-3.5-flash-lite",
+            "gemini-2.0-flash" to "gemini-3.5-flash-lite",
+            "gemini-2.0-flash-exp" to "gemini-3.8-flash",
+            "gemini-2.5-flash-lite" to "gemini-3.5-flash-lite",
+            "gemini-2.5-flash" to "gemini-3.8-flash"
         )
         model1Name = deprecatedMap[model1Name] ?: model1Name
         model2Name = deprecatedMap[model2Name] ?: model2Name
         model3Name = deprecatedMap[model3Name] ?: model3Name
 
-        if (model1Name.isBlank()) model1Name = "gemini-3.5-flash"
-        if (model2Name.isBlank()) model2Name = "gemini-3.5-flash-lite"
-        if (model3Name.isBlank()) model3Name = "gemini-3.8-flash"
+        if (model1Name.isBlank()) model1Name = "gemini-3.5-flash-lite"
+        if (model2Name.isBlank()) model2Name = "gemini-3.8-flash"
+        if (model3Name.isBlank()) model3Name = "gemini-3.5-flash"
 
         val activeList = mutableListOf<String>()
         if (model1Enabled && model1Name.isNotBlank()) activeList.add(model1Name)
@@ -769,6 +915,13 @@ class MainActivity : AppCompatActivity() {
         if (selectedModels.isEmpty()) {
             selectedModels.add(model1Name)
             model1Enabled = true
+        }
+
+        isFeatureProcessTextEnabled = prefs.getBoolean(KEY_FEATURE_PROCESS_TEXT, true)
+        isFeatureCameraEnabled = prefs.getBoolean(KEY_FEATURE_CAMERA, true)
+        isFeatureAutoClipboardEnabled = prefs.getBoolean(KEY_FEATURE_AUTO_CLIPBOARD, true)
+        if (::btnTakePhoto.isInitialized) {
+            btnTakePhoto.visibility = if (isFeatureCameraEnabled) View.VISIBLE else View.GONE
         }
     }
 
@@ -838,6 +991,14 @@ class MainActivity : AppCompatActivity() {
         val cbModel2 = dialogView.findViewById<CheckBox>(R.id.cbModel2)
         val cbModel3 = dialogView.findViewById<CheckBox>(R.id.cbModel3)
 
+        val swFeatureProcessText = dialogView.findViewById<SwitchMaterial>(R.id.swFeatureProcessText)
+        val swFeatureCamera = dialogView.findViewById<SwitchMaterial>(R.id.swFeatureCamera)
+        val swFeatureAutoClipboard = dialogView.findViewById<SwitchMaterial>(R.id.swFeatureAutoClipboard)
+
+        swFeatureProcessText?.isChecked = isFeatureProcessTextEnabled
+        swFeatureCamera?.isChecked = isFeatureCameraEnabled
+        swFeatureAutoClipboard?.isChecked = isFeatureAutoClipboardEnabled
+
         val btnFetchModels = dialogView.findViewById<android.widget.Button>(R.id.btnFetchModels)
         val pbFetchModels = dialogView.findViewById<ProgressBar>(R.id.pbFetchModels)
 
@@ -904,7 +1065,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        AlertDialog.Builder(this)
+        val settingsDialog = AlertDialog.Builder(this)
             .setTitle("Cài đặt Gemini")
             .setView(dialogView)
             .setPositiveButton("Lưu") { dialog, _ ->
@@ -939,12 +1100,16 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 apiKeys = newKeys
-                model1Name = m1.ifEmpty { "gemini-3.5-flash" }
+                model1Name = m1.ifEmpty { "gemini-3.5-flash-lite" }
                 model1Enabled = cbModel1.isChecked
-                model2Name = m2.ifEmpty { "gemini-3.5-flash-lite" }
+                model2Name = m2.ifEmpty { "gemini-3.8-flash" }
                 model2Enabled = cbModel2.isChecked
-                model3Name = m3.ifEmpty { "gemini-3.8-flash" }
+                model3Name = m3.ifEmpty { "gemini-3.5-flash" }
                 model3Enabled = cbModel3.isChecked
+
+                isFeatureProcessTextEnabled = swFeatureProcessText?.isChecked ?: true
+                isFeatureCameraEnabled = swFeatureCamera?.isChecked ?: true
+                isFeatureAutoClipboardEnabled = swFeatureAutoClipboard?.isChecked ?: true
 
                 selectedModels = newModels.distinct().toMutableList()
                 currentKeyIndex = 0
@@ -961,18 +1126,46 @@ class MainActivity : AppCompatActivity() {
                     .putString(KEY_MODEL_3_NAME, model3Name)
                     .putBoolean(KEY_MODEL_3_ENABLED, model3Enabled)
                     .putString(KEY_SELECTED_MODELS, selectedModels.joinToString("|||"))
+                    .putBoolean(KEY_FEATURE_PROCESS_TEXT, isFeatureProcessTextEnabled)
+                    .putBoolean(KEY_FEATURE_CAMERA, isFeatureCameraEnabled)
+                    .putBoolean(KEY_FEATURE_AUTO_CLIPBOARD, isFeatureAutoClipboardEnabled)
                     .apply()
+
+                if (::btnTakePhoto.isInitialized) {
+                    btnTakePhoto.visibility = if (isFeatureCameraEnabled) View.VISIBLE else View.GONE
+                }
+                updateProcessTextComponentState(isFeatureProcessTextEnabled)
 
                 updateActiveModelBadge()
                 Toast.makeText(this, "Đã lưu cài đặt!", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
             }
             .setNegativeButton("Hủy", null)
-            .show()
+            .create()
+
+        settingsDialog.show()
+        settingsDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(getColor(R.color.primary_indigo))
+        settingsDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(getColor(R.color.text_secondary))
     }
 
 
+    private fun getModelBadge(modelName: String): String {
+        return when {
+            modelName.contains("flash-lite") -> "⚡ Siêu nhanh (Khuyên dùng)"
+            modelName.contains("flash") -> "🚀 Cân bằng & Đa năng"
+            modelName.contains("pro") -> "🎯 Dịch sâu & Văn học"
+            else -> "✨ Tiêu chuẩn"
+        }
+    }
+
     private suspend fun fetchAvailableModelsFromApi(apiKey: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        val curatedRecommended = listOf(
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemini-3.1-pro"
+        )
+
         try {
             val url = URL("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey")
             val conn = url.openConnection() as HttpURLConnection
@@ -985,11 +1178,14 @@ class MainActivity : AppCompatActivity() {
                 val responseText = conn.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(responseText)
                 val jsonArray = json.optJSONArray("models") ?: JSONArray()
-                val list = mutableListOf<String>()
+                val fetchedList = mutableListOf<String>()
+
+                val snapshotRegex = Regex(".*-(\\d{3,4}|\\d{2}-\\d{2})$")
+
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
                     val rawName = obj.optString("name", "")
-                    val cleanName = rawName.removePrefix("models/")
+                    val cleanName = rawName.removePrefix("models/").trim()
                     val methods = obj.optJSONArray("supportedGenerationMethods")
                     var supportsGenerate = false
                     if (methods != null) {
@@ -1000,24 +1196,64 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    if (supportsGenerate && cleanName.contains("gemini", ignoreCase = true)
-                        && !cleanName.contains("embedding", ignoreCase = true)
-                        && !cleanName.contains("aqa", ignoreCase = true)
-                        && !cleanName.contains("robotics", ignoreCase = true)
-                        && !cleanName.contains("computer-use", ignoreCase = true)
-                    ) {
-                        list.add(cleanName)
-                    }
+
+                    if (!supportsGenerate) continue
+                    if (!cleanName.contains("gemini", ignoreCase = true)) continue
+
+                    // Loại bỏ các category không phục vụ dịch text/image
+                    val isUnwantedCategory = cleanName.contains("embedding", ignoreCase = true) ||
+                            cleanName.contains("aqa", ignoreCase = true) ||
+                            cleanName.contains("robotics", ignoreCase = true) ||
+                            cleanName.contains("computer-use", ignoreCase = true) ||
+                            cleanName.contains("learnlm", ignoreCase = true) ||
+                            cleanName.contains("imagen", ignoreCase = true) ||
+                            cleanName.contains("veo", ignoreCase = true) ||
+                            cleanName.contains("tts", ignoreCase = true) ||
+                            cleanName.contains("speech", ignoreCase = true) ||
+                            cleanName.contains("audio", ignoreCase = true) ||
+                            cleanName.contains("realtime", ignoreCase = true) ||
+                            cleanName.contains("live", ignoreCase = true) ||
+                            cleanName.contains("custom", ignoreCase = true) ||
+                            cleanName.contains("tuned", ignoreCase = true)
+
+                    if (isUnwantedCategory) continue
+
+                    // Loại bỏ các bản thử nghiệm không ổn định hoặc hay bị đóng
+                    val isExpOrPreview = cleanName.contains("-exp", ignoreCase = true) ||
+                            cleanName.contains("-preview", ignoreCase = true) ||
+                            cleanName.contains("-thinking", ignoreCase = true)
+
+                    if (isExpOrPreview) continue
+
+                    // Loại bỏ các thế hệ cũ đã shutdown hoặc deprecated
+                    val isOutdatedGen = cleanName.startsWith("gemini-1.0") ||
+                            cleanName.startsWith("gemini-1.5") ||
+                            cleanName.startsWith("gemini-2.0") ||
+                            cleanName.startsWith("gemini-2.5") ||
+                            cleanName == "gemini-pro"
+
+                    if (isOutdatedGen) continue
+
+                    // Loại bỏ các snapshot ngày/mã số
+                    if (snapshotRegex.matches(cleanName)) continue
+
+                    fetchedList.add(cleanName)
                 }
 
-                list.sortWith { a, b ->
+                val combined = (curatedRecommended + fetchedList).distinct().toMutableList()
+
+                combined.sortWith { a, b ->
                     fun score(name: String): Int = when {
                         name.contains("3.5-flash-lite") -> 10
-                        name.contains("3.5-flash") -> 20
+                        name.contains("3.1-flash-lite") -> 15
+                        name.contains("2.5-flash-lite") -> 18
+                        name.contains("flash-lite") -> 20
                         name.contains("3.8-flash") -> 30
-                        name.contains("2.5-flash") -> 40
-                        name.contains("2.0-flash") -> 50
-                        name.contains("flash") -> 60
+                        name.contains("3.6-flash") -> 35
+                        name.contains("3.5-flash") -> 40
+                        name.contains("2.5-flash") -> 45
+                        name.contains("flash") -> 50
+                        name.contains("3.1-pro") -> 60
                         name.contains("pro") -> 70
                         else -> 90
                     }
@@ -1026,17 +1262,12 @@ class MainActivity : AppCompatActivity() {
                     if (sA != sB) sA.compareTo(sB) else a.compareTo(b)
                 }
 
-                Result.success(list)
+                Result.success(combined)
             } else {
-                val errText = try {
-                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                } catch (e: Exception) {
-                    ""
-                }
-                Result.failure(Exception("HTTP $responseCode: $errText"))
+                Result.success(curatedRecommended)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.success(curatedRecommended)
         }
     }
 
@@ -1049,9 +1280,12 @@ class MainActivity : AppCompatActivity() {
         cbModel2: CheckBox,
         cbModel3: CheckBox
     ) {
-        val items = modelList.toTypedArray()
-        val checkedArray = BooleanArray(items.size) { i ->
-            val name = items[i]
+        val displayItems = modelList.map { name ->
+            "$name  (${getModelBadge(name)})"
+        }.toTypedArray()
+
+        val checkedArray = BooleanArray(modelList.size) { i ->
+            val name = modelList[i]
             (cbModel1.isChecked && etModel1.text.toString().trim() == name) ||
             (cbModel2.isChecked && etModel2.text.toString().trim() == name) ||
             (cbModel3.isChecked && etModel3.text.toString().trim() == name)
@@ -1059,8 +1293,8 @@ class MainActivity : AppCompatActivity() {
 
         var selectionDialog: AlertDialog? = null
         val builder = AlertDialog.Builder(this)
-            .setTitle("Chọn model hỗ trợ (${modelList.size})")
-            .setMultiChoiceItems(items, checkedArray) { _, which, isChecked ->
+            .setTitle("Chọn model dịch thuật (${modelList.size})")
+            .setMultiChoiceItems(displayItems, checkedArray) { _, which, isChecked ->
                 checkedArray[which] = isChecked
                 val count = checkedArray.count { it }
                 if (count > 3) {
@@ -1092,9 +1326,8 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     cbModel3.isChecked = false
                 }
-
             }
-            .setNeutralButton("Chọn Top 3") { _, _ ->
+            .setNeutralButton("⚡ Chọn Top 3 Tối Ưu") { _, _ ->
                 if (modelList.isNotEmpty()) {
                     etModel1.setText(modelList[0])
                     cbModel1.isChecked = true
@@ -1112,6 +1345,24 @@ class MainActivity : AppCompatActivity() {
 
         selectionDialog = builder.create()
         selectionDialog.show()
+
+        // Giảm chiều cao danh sách model để không bị che mất các button ở dưới cùng
+        selectionDialog.listView?.let { lv ->
+            lv.isVerticalScrollBarEnabled = true
+            lv.scrollBarStyle = View.SCROLLBARS_INSIDE_INSET
+            lv.post {
+                val displayMetrics = resources.displayMetrics
+                val maxListHeight = (displayMetrics.heightPixels * 0.42).toInt()
+                val lp = lv.layoutParams
+                lp.height = maxListHeight
+                lv.layoutParams = lp
+                lv.requestLayout()
+            }
+        }
+
+        selectionDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(getColor(R.color.primary_indigo))
+        selectionDialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(getColor(R.color.primary_indigo_dark))
+        selectionDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(getColor(R.color.text_secondary))
     }
 
     private fun getNextApiKey(): Pair<Int, String>? {
@@ -1138,9 +1389,22 @@ class MainActivity : AppCompatActivity() {
     private fun getModel(apiKey: String, modelName: String): GenerativeModel {
         val cacheKey = "$apiKey:$modelName"
         return modelCache.getOrPut(cacheKey) {
+            val config = generationConfig {
+                temperature = 0.2f
+                topP = 0.95f
+            }
+            val safety = listOf(
+                SafetySetting(HarmCategory.HARASSMENT, BlockThreshold.ONLY_HIGH),
+                SafetySetting(HarmCategory.HATE_SPEECH, BlockThreshold.ONLY_HIGH),
+                SafetySetting(HarmCategory.SEXUALLY_EXPLICIT, BlockThreshold.ONLY_HIGH),
+                SafetySetting(HarmCategory.DANGEROUS_CONTENT, BlockThreshold.ONLY_HIGH)
+            )
             GenerativeModel(
                 modelName = modelName,
-                apiKey = apiKey
+                apiKey = apiKey,
+                generationConfig = config,
+                safetySettings = safety,
+                requestOptions = RequestOptions(timeout = 30_000)
             )
         }
     }
@@ -1168,7 +1432,7 @@ class MainActivity : AppCompatActivity() {
     private fun callGeminiApi(input: String, bitmaps: List<Bitmap>) {
         val startTime = System.currentTimeMillis()
 
-        tvResult.text = "Đang xử lý dịch thuật..."
+        tvResult.text = "⚡ Đang kết nối tới Gemini AI..."
         setTranslatingState(true)
         btnCopyResult.visibility = View.GONE
         btnShareResult.visibility = View.GONE
@@ -1176,9 +1440,6 @@ class MainActivity : AppCompatActivity() {
         layoutResultMeta.visibility = View.GONE
 
         lifecycleScope.launch(Dispatchers.IO) {
-            var lastError: Exception? = null
-            val maxAttempts = apiKeys.size
-
             val sourceClean = extractLangName(currentSourceLang)
             val targetClean = extractLangName(currentTargetLang)
             val sourceClause = if (currentSourceLang.contains("Tự động")) "" else "từ $sourceClean "
@@ -1223,110 +1484,213 @@ class MainActivity : AppCompatActivity() {
                     }
             }
 
-            for (attempt in 1..maxAttempts) {
-                val keyPair = getNextApiKey() ?: break
-                val keyNumber = keyPair.first
-                val apiKey = keyPair.second
-                val modelName = getCurrentModel()
-                android.util.Log.i("AiTranslator", "Attempt $attempt with key #$keyNumber, model: $modelName")
-
-                withContext(Dispatchers.Main) {
-                    tvResult.text = "Đang dịch với $modelName (Key $keyNumber)..."
+            // Danh sách model ứng viên để fallback lần lượt
+            val candidateModels = if (selectedModels.isNotEmpty()) {
+                val currentIdx = currentModelIndex.coerceAtLeast(0) % selectedModels.size
+                val ordered = mutableListOf<String>()
+                for (i in selectedModels.indices) {
+                    ordered.add(selectedModels[(currentIdx + i) % selectedModels.size])
                 }
+                ordered.distinct()
+            } else {
+                listOf("gemini-3.5-flash-lite", "gemini-3.8-flash")
+            }
 
-                try {
-                    val generativeModel = getModel(apiKey, modelName)
+            var lastError: Exception? = null
+            var success = false
 
-                    val response = if (hasImages) {
-                        val inputContent = content {
-                            for (bitmap in bitmaps) {
-                                image(bitmap)
-                            }
-                            text(prompt)
-                        }
-                        generativeModel.generateContent(inputContent)
-                    } else {
-                        generativeModel.generateContent(prompt)
-                    }
+            modelLoop@ for (modelName in candidateModels) {
+                val keyAttempts = if (apiKeys.isNotEmpty()) apiKeys.size else 1
 
-                    val resultText = response.text
-                    val elapsedSeconds = (System.currentTimeMillis() - startTime) / 1000.0
+                for (keyAttempt in 0 until keyAttempts) {
+                    val keyIndex = (currentKeyIndex + keyAttempt) % apiKeys.size
+                    val keyNumber = keyIndex + 1
+                    val apiKey = apiKeys[keyIndex]
 
                     withContext(Dispatchers.Main) {
-                        setTranslatingState(false)
+                        tvResult.text = "⚡ Đang dịch với $modelName (Key $keyNumber)..."
+                        tvActiveModel.text = modelName
+                    }
 
-                        if (!resultText.isNullOrBlank()) {
-                            lastResultText = resultText
-                            tvResult.text = resultText
-                            btnCopyResult.visibility = View.VISIBLE
-                            btnShareResult.visibility = View.VISIBLE
-                            btnClearResult.visibility = View.VISIBLE
-                            layoutResultMeta.visibility = View.VISIBLE
-                            tvResultModel.text = "$modelName • Key $keyNumber"
-                            tvResultSpeed.text = "⚡ ${String.format("%.1fs", elapsedSeconds)}"
-
-                            // Smooth scroll to top of result box so user reads from beginning
-                            nestedScrollViewMain.post {
-                                nestedScrollViewMain.smoothScrollTo(0, cardResult.top)
+                    try {
+                        val generativeModel = getModel(apiKey, modelName)
+                        val flow = if (hasImages) {
+                            val inputContent = content {
+                                for (bitmap in bitmaps) {
+                                    image(bitmap)
+                                }
+                                text(prompt)
                             }
+                            generativeModel.generateContentStream(inputContent)
                         } else {
-                            tvResult.text = "Không nhận được phản hồi từ AI."
+                            generativeModel.generateContentStream(prompt)
                         }
-                    }
-                    return@launch
 
-                } catch (e: Exception) {
-                    android.util.Log.e("AiTranslator", "Gemini error attempt $attempt (Key $keyNumber, Model $modelName): ${e.message}", e)
-                    lastError = e
-                    val errorMsg = e.message ?: e.toString()
+                        val streamedText = StringBuilder()
+                        var receivedAnyChunk = false
 
-                    // Check for network errors
-                    if (e is UnknownHostException || e is SocketTimeoutException || e is ConnectException ||
-                        errorMsg.contains("Unable to resolve host") || errorMsg.contains("timeout")) {
+                        flow.collect { responseChunk ->
+                            val textChunk = responseChunk.text
+                            if (!textChunk.isNullOrEmpty()) {
+                                receivedAnyChunk = true
+                                streamedText.append(textChunk)
+                                val currentFull = streamedText.toString()
+                                withContext(Dispatchers.Main) {
+                                    tvResult.text = currentFull
+                                    btnSend.text = "⚡ Đang nhận bản dịch..."
+                                    btnCopyResult.visibility = View.VISIBLE
+                                    btnShareResult.visibility = View.VISIBLE
+                                    btnClearResult.visibility = View.VISIBLE
+                                }
+                            }
+                        }
+
+                        val finalText = streamedText.toString().trim()
+                        if (receivedAnyChunk && finalText.isNotEmpty()) {
+                            val elapsedSeconds = (System.currentTimeMillis() - startTime) / 1000.0
+                            withContext(Dispatchers.Main) {
+                                setTranslatingState(false)
+                                lastResultText = finalText
+                                tvResult.text = finalText
+                                layoutResultMeta.visibility = View.VISIBLE
+                                tvResultModel.text = "$modelName • Key $keyNumber"
+                                tvResultSpeed.text = "⚡ ${String.format("%.1fs", elapsedSeconds)}"
+
+                                nestedScrollViewMain.post {
+                                    nestedScrollViewMain.smoothScrollTo(0, cardResult.top)
+                                }
+                            }
+
+                            // Lưu lại key & model hoạt động tốt nhất cho lần kế tiếp
+                            currentKeyIndex = keyIndex
+                            val mIdx = selectedModels.indexOf(modelName)
+                            if (mIdx >= 0) {
+                                currentModelIndex = mIdx
+                            }
+                            success = true
+                            break@modelLoop
+                        } else {
+                            throw Exception("Không nhận được nội dung từ $modelName")
+                        }
+
+                    } catch (e: Exception) {
+                        android.util.Log.e("AiTranslator", "Lỗi dịch ($modelName, Key $keyNumber): ${e.message}", e)
+                        lastError = e
+                        val errorMsg = e.message ?: e.toString()
+
+                        // 1. Kiểm tra lỗi mất kết nối mạng
+                        if (e is UnknownHostException || e is SocketTimeoutException || e is ConnectException ||
+                            errorMsg.contains("Unable to resolve host", ignoreCase = true) ||
+                            errorMsg.contains("timeout", ignoreCase = true)
+                        ) {
+                            withContext(Dispatchers.Main) {
+                                setTranslatingState(false)
+                                btnClearResult.visibility = View.VISIBLE
+                                tvResult.text = "❌ Lỗi mạng: Không thể kết nối tới Google AI. Vui lòng kiểm tra lại kết nối Internet!"
+                            }
+                            return@launch
+                        }
+
+                        // 2. Kiểm tra lỗi Quota / Rate limit (429)
+                        val isQuotaExhausted = errorMsg.contains("429") ||
+                                errorMsg.contains("rate limit", ignoreCase = true) ||
+                                errorMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+                                errorMsg.contains("quota", ignoreCase = true)
+
+                        if (isQuotaExhausted) {
+                            if (keyAttempt < keyAttempts - 1) {
+                                withContext(Dispatchers.Main) {
+                                    tvResult.text = "⚠️ Key $keyNumber hết quota, đang chuyển sang Key tiếp theo..."
+                                }
+                                delay(500)
+                                continue
+                            } else {
+                                // Tất cả key đều hết quota cho model này -> chuyển sang model tiếp theo
+                                val nextModel = candidateModels.getOrNull(candidateModels.indexOf(modelName) + 1)
+                                withContext(Dispatchers.Main) {
+                                    tvResult.text = if (nextModel != null) {
+                                        "⚠️ Model $modelName hết quota, đang thử chuyển sang $nextModel..."
+                                    } else {
+                                        "⚠️ Model $modelName hết quota lượt gọi..."
+                                    }
+                                }
+                                delay(600)
+                                break
+                            }
+                        }
+
+                        // 3. Kiểm tra lỗi quá tải máy chủ Google (503 Service Unavailable / Model Overloaded) hoặc lỗi 500
+                        val isOverloaded = errorMsg.contains("503") ||
+                                errorMsg.contains("overloaded", ignoreCase = true) ||
+                                errorMsg.contains("UNAVAILABLE", ignoreCase = true) ||
+                                errorMsg.contains("500") ||
+                                errorMsg.contains("INTERNAL", ignoreCase = true)
+
+                        if (isOverloaded) {
+                            val nextModel = candidateModels.getOrNull(candidateModels.indexOf(modelName) + 1)
+                            withContext(Dispatchers.Main) {
+                                tvResult.text = if (nextModel != null) {
+                                    "⚠️ Model $modelName đang quá tải (503), đang tự động chuyển sang $nextModel..."
+                                } else {
+                                    "⚠️ Model $modelName đang quá tải (503)..."
+                                }
+                            }
+                            delay(700)
+                            break // Chuyển sang model dự phòng tiếp theo ngay lập tức
+                        }
+
+                        // 4. Kiểm tra lỗi model không khả dụng hoặc bị đóng (404 Not Found)
+                        val isNotFound = errorMsg.contains("404") ||
+                                errorMsg.contains("NOT_FOUND", ignoreCase = true)
+
+                        if (isNotFound) {
+                            val nextModel = candidateModels.getOrNull(candidateModels.indexOf(modelName) + 1)
+                            withContext(Dispatchers.Main) {
+                                tvResult.text = if (nextModel != null) {
+                                    "⚠️ Model $modelName không khả dụng (404), đang chuyển sang $nextModel..."
+                                } else {
+                                    "⚠️ Model $modelName không khả dụng (404)..."
+                                }
+                            }
+                            delay(500)
+                            break // Chuyển sang model tiếp theo
+                        }
+
+                        // 5. Kiểm tra lỗi bộ lọc an toàn (Safety Block)
+                        val isSafety = errorMsg.contains("SAFETY", ignoreCase = true) ||
+                                errorMsg.contains("Blocked", ignoreCase = true)
+
+                        if (isSafety) {
+                            withContext(Dispatchers.Main) {
+                                setTranslatingState(false)
+                                btnClearResult.visibility = View.VISIBLE
+                                tvResult.text = "⚠️ Bản dịch bị chặn bởi bộ lọc an toàn của Google. Vui lòng kiểm tra lại văn bản cần dịch!"
+                            }
+                            return@launch
+                        }
+
+                        // Các lỗi khác -> thông báo và chuyển model
+                        val nextModel = candidateModels.getOrNull(candidateModels.indexOf(modelName) + 1)
                         withContext(Dispatchers.Main) {
-                            setTranslatingState(false)
-                            btnClearResult.visibility = View.VISIBLE
-                            tvResult.text = "❌ Lỗi mạng: Không thể kết nối tới Google AI. Vui lòng kiểm tra lại kết nối Internet!"
+                            tvResult.text = if (nextModel != null) {
+                                "⚠️ Model $modelName gặp lỗi, đang thử $nextModel..."
+                            } else {
+                                "⚠️ Model $modelName gặp lỗi..."
+                            }
                         }
-                        return@launch
-                    }
-
-                    // Check for Rate limit / Quota errors
-                    val isQuotaExhausted = errorMsg.contains("429") ||
-                            errorMsg.contains("rate limit", ignoreCase = true) ||
-                            errorMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
-                            errorMsg.contains("quota", ignoreCase = true)
-
-                    if (isQuotaExhausted) {
-                        withContext(Dispatchers.Main) {
-                            tvResult.text = "⚠️ API Key $keyNumber hết quota, đang tự động chuyển sang Key tiếp theo..."
-                        }
-                        continue
-                    }
-
-                    // Check if model not found (404)
-                    if (errorMsg.contains("404") || errorMsg.contains("NOT_FOUND")) {
-                        advanceToNextModel()
-                        val nextModel = getCurrentModel()
-                        withContext(Dispatchers.Main) {
-                            tvResult.text = "⚠️ Model $modelName không khả dụng, đang thử chuyển sang $nextModel..."
-                        }
-                        continue
-                    }
-
-                    // Other error
-                    withContext(Dispatchers.Main) {
-                        tvResult.text = "⚠️ Key $keyNumber gặp lỗi: $errorMsg. Thử key khác..."
+                        delay(500)
+                        break
                     }
                 }
             }
 
-            // All keys failed
-            withContext(Dispatchers.Main) {
-                setTranslatingState(false)
-                btnClearResult.visibility = View.VISIBLE
-                val errMsg = lastError?.message ?: lastError?.toString() ?: "Unknown error"
-                tvResult.text = "❌ Tất cả API Keys (${apiKeys.size} keys) đều thất bại:\n\n$errMsg"
+            if (!success) {
+                withContext(Dispatchers.Main) {
+                    setTranslatingState(false)
+                    btnClearResult.visibility = View.VISIBLE
+                    val errMsg = lastError?.message ?: lastError?.toString() ?: "Lỗi không xác định"
+                    tvResult.text = "❌ Tất cả model (${candidateModels.joinToString(", ")}) đều không thành công:\n\n$errMsg"
+                }
             }
         }
     }
