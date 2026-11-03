@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_screen">
+
+    <!-- Models List -->
+    <ListView
+        android:id="@+id/lvModels"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:choiceMode="multipleChoice"
+        android:divider="#E2E8F0"
+        android:dividerHeight="1dp"
+        android:scrollbars="vertical"
+        android:fadeScrollbars="false" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E2E8F0" />
+
+    <!-- Compact Bottom Action Bar: Giảm khoảng cách trên dưới vừa vặn -->
+    <LinearLayout
+        android:id="@+id/layoutBottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="8dp"
+        android:background="@color/surface_card">
+
+        <!-- Nút chọn Top 3 tối ưu nhanh -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnQuickSelectTop3"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="⚡ Top 3 Tối Ưu"
+            android:textColor="@color/primary_indigo"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            app:strokeColor="@color/primary_indigo"
+            app:strokeWidth="1dp"
+            app:cornerRadius="8dp"
+            android:paddingHorizontal="10dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Nút Hủy -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancelSelection"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="HỦY"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:paddingHorizontal="12dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp" />
+
+        <!-- Nút Áp Dụng -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnApplySelection"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:text="ÁP DỤNG"
+            android:textColor="@color/text_white"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            app:backgroundTint="@color/primary_indigo"
+            app:cornerRadius="8dp"
+            android:paddingHorizontal="16dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp" />
+    </LinearLayout>
+
+</LinearLayout>

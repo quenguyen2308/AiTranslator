@@ -1,14 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@color/bg_screen"
-    android:scrollbars="vertical"
-    android:fadeScrollbars="false"
-    android:scrollbarThumbVertical="@drawable/scrollbar_thumb"
-    android:scrollbarSize="4dp"
-    android:fillViewport="true">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_screen">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/bg_screen"
+        android:scrollbars="vertical"
+        android:fadeScrollbars="false"
+        android:scrollbarThumbVertical="@drawable/scrollbar_thumb"
+        android:scrollbarSize="4dp"
+        android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -469,4 +476,58 @@
         </LinearLayout>
 
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+    </androidx.core.widget.NestedScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E2E8F0" />
+
+    <!-- Compact Bottom Action Bar: Giống hệt dialog danh sách model -->
+    <LinearLayout
+        android:id="@+id/layoutBottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical|end"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="8dp"
+        android:background="@color/surface_card">
+
+        <!-- Nút Hủy -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancelSettings"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="HỦY"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:paddingHorizontal="12dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp" />
+
+        <!-- Nút Lưu -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveSettings"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:text="LƯU"
+            android:textColor="@color/text_white"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            app:backgroundTint="@color/primary_indigo"
+            app:cornerRadius="8dp"
+            android:paddingHorizontal="18dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp" />
+    </LinearLayout>
+
+</LinearLayout>

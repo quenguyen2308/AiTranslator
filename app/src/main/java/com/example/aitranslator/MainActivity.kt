@@ -24,6 +24,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -1020,6 +1021,8 @@ class MainActivity : AppCompatActivity() {
             cbModel1.isChecked = true
         }
 
+        var settingsDialog: AlertDialog? = null
+
         btnFetchModels?.setOnClickListener {
             val keyToUse = listOf(etApiKey1, etApiKey2, etApiKey3)
                 .map { it.text.toString().trim() }
@@ -1051,7 +1054,7 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "Không tìm thấy model nào hỗ trợ sinh văn bản!", Toast.LENGTH_SHORT).show()
                         return@onSuccess
                     }
-                    showModelSelectionDialog(modelList, etModel1, etModel2, etModel3, cbModel1, cbModel2, cbModel3)
+                    showModelSelectionDialog(modelList, etModel1, etModel2, etModel3, cbModel1, cbModel2, cbModel3, settingsDialog)
                 }.onFailure { ex ->
                     val msg = when {
                         ex.message?.contains("400") == true || ex.message?.contains("403") == true ->
@@ -1065,87 +1068,105 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val settingsDialog = AlertDialog.Builder(this)
+        val btnCancelSettings = dialogView.findViewById<Button>(R.id.btnCancelSettings)
+        val btnSaveSettings = dialogView.findViewById<Button>(R.id.btnSaveSettings)
+
+        settingsDialog = AlertDialog.Builder(this)
             .setTitle("Cài đặt Gemini")
             .setView(dialogView)
-            .setPositiveButton("Lưu") { dialog, _ ->
-                val newKeys = mutableListOf<String>()
-                listOf(etApiKey1, etApiKey2, etApiKey3).forEach { et ->
-                    val key = et.text.toString().trim()
-                    if (key.isNotEmpty()) newKeys.add(key)
-                }
-
-                val m1 = etModel1.text.toString().trim()
-                val m2 = etModel2.text.toString().trim()
-                val m3 = etModel3.text.toString().trim()
-
-                val newModels = mutableListOf<String>()
-                if (cbModel1.isChecked && m1.isNotEmpty()) {
-                    newModels.add(m1)
-                }
-                if (cbModel2.isChecked && m2.isNotEmpty()) {
-                    newModels.add(m2)
-                }
-                if (cbModel3.isChecked && m3.isNotEmpty()) {
-                    newModels.add(m3)
-                }
-
-                if (newKeys.isEmpty()) {
-                    Toast.makeText(this, "Cần nhập ít nhất 1 API Key!", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                if (newModels.isEmpty()) {
-                    Toast.makeText(this, "Cần chọn ít nhất 1 model!", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                apiKeys = newKeys
-                model1Name = m1.ifEmpty { "gemini-3.5-flash-lite" }
-                model1Enabled = cbModel1.isChecked
-                model2Name = m2.ifEmpty { "gemini-3.8-flash" }
-                model2Enabled = cbModel2.isChecked
-                model3Name = m3.ifEmpty { "gemini-3.5-flash" }
-                model3Enabled = cbModel3.isChecked
-
-                isFeatureProcessTextEnabled = swFeatureProcessText?.isChecked ?: true
-                isFeatureCameraEnabled = swFeatureCamera?.isChecked ?: true
-                isFeatureAutoClipboardEnabled = swFeatureAutoClipboard?.isChecked ?: true
-
-                selectedModels = newModels.distinct().toMutableList()
-                currentKeyIndex = 0
-                currentModelIndex = 0
-                modelCache.clear()
-
-                val prefs = getSecurePrefs()
-                prefs.edit()
-                    .putString(KEY_API_KEYS, apiKeys.joinToString("|||"))
-                    .putString(KEY_MODEL_1_NAME, model1Name)
-                    .putBoolean(KEY_MODEL_1_ENABLED, model1Enabled)
-                    .putString(KEY_MODEL_2_NAME, model2Name)
-                    .putBoolean(KEY_MODEL_2_ENABLED, model2Enabled)
-                    .putString(KEY_MODEL_3_NAME, model3Name)
-                    .putBoolean(KEY_MODEL_3_ENABLED, model3Enabled)
-                    .putString(KEY_SELECTED_MODELS, selectedModels.joinToString("|||"))
-                    .putBoolean(KEY_FEATURE_PROCESS_TEXT, isFeatureProcessTextEnabled)
-                    .putBoolean(KEY_FEATURE_CAMERA, isFeatureCameraEnabled)
-                    .putBoolean(KEY_FEATURE_AUTO_CLIPBOARD, isFeatureAutoClipboardEnabled)
-                    .apply()
-
-                if (::btnTakePhoto.isInitialized) {
-                    btnTakePhoto.visibility = if (isFeatureCameraEnabled) View.VISIBLE else View.GONE
-                }
-                updateProcessTextComponentState(isFeatureProcessTextEnabled)
-
-                updateActiveModelBadge()
-                Toast.makeText(this, "Đã lưu cài đặt!", Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Hủy", null)
             .create()
 
-        settingsDialog.show()
-        settingsDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(getColor(R.color.primary_indigo))
-        settingsDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(getColor(R.color.text_secondary))
+        btnCancelSettings?.setOnClickListener {
+            settingsDialog?.dismiss()
+        }
+
+        btnSaveSettings?.setOnClickListener {
+            val newKeys = mutableListOf<String>()
+            listOf(etApiKey1, etApiKey2, etApiKey3).forEach { et ->
+                val key = et.text.toString().trim()
+                if (key.isNotEmpty()) newKeys.add(key)
+            }
+
+            val m1 = etModel1.text.toString().trim()
+            val m2 = etModel2.text.toString().trim()
+            val m3 = etModel3.text.toString().trim()
+
+            val newModels = mutableListOf<String>()
+            if (cbModel1.isChecked && m1.isNotEmpty()) {
+                newModels.add(m1)
+            }
+            if (cbModel2.isChecked && m2.isNotEmpty()) {
+                newModels.add(m2)
+            }
+            if (cbModel3.isChecked && m3.isNotEmpty()) {
+                newModels.add(m3)
+            }
+
+            if (newKeys.isEmpty()) {
+                Toast.makeText(this, "Cần nhập ít nhất 1 API Key!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (newModels.isEmpty()) {
+                Toast.makeText(this, "Cần chọn ít nhất 1 model!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            apiKeys = newKeys
+            model1Name = m1.ifEmpty { "gemini-3.5-flash-lite" }
+            model1Enabled = cbModel1.isChecked
+            model2Name = m2.ifEmpty { "gemini-3.8-flash" }
+            model2Enabled = cbModel2.isChecked
+            model3Name = m3.ifEmpty { "gemini-3.5-flash" }
+            model3Enabled = cbModel3.isChecked
+
+            isFeatureProcessTextEnabled = swFeatureProcessText?.isChecked ?: true
+            isFeatureCameraEnabled = swFeatureCamera?.isChecked ?: true
+            isFeatureAutoClipboardEnabled = swFeatureAutoClipboard?.isChecked ?: true
+
+            selectedModels = newModels.distinct().toMutableList()
+            currentKeyIndex = 0
+            currentModelIndex = 0
+            modelCache.clear()
+
+            val prefs = getSecurePrefs()
+            prefs.edit()
+                .putString(KEY_API_KEYS, apiKeys.joinToString("|||"))
+                .putString(KEY_MODEL_1_NAME, model1Name)
+                .putBoolean(KEY_MODEL_1_ENABLED, model1Enabled)
+                .putString(KEY_MODEL_2_NAME, model2Name)
+                .putBoolean(KEY_MODEL_2_ENABLED, model2Enabled)
+                .putString(KEY_MODEL_3_NAME, model3Name)
+                .putBoolean(KEY_MODEL_3_ENABLED, model3Enabled)
+                .putString(KEY_SELECTED_MODELS, selectedModels.joinToString("|||"))
+                .putBoolean(KEY_FEATURE_PROCESS_TEXT, isFeatureProcessTextEnabled)
+                .putBoolean(KEY_FEATURE_CAMERA, isFeatureCameraEnabled)
+                .putBoolean(KEY_FEATURE_AUTO_CLIPBOARD, isFeatureAutoClipboardEnabled)
+                .apply()
+
+            if (::btnTakePhoto.isInitialized) {
+                btnTakePhoto.visibility = if (isFeatureCameraEnabled) View.VISIBLE else View.GONE
+            }
+            updateProcessTextComponentState(isFeatureProcessTextEnabled)
+
+            updateActiveModelBadge()
+            Toast.makeText(this, "Đã lưu cài đặt!", Toast.LENGTH_SHORT).show()
+            settingsDialog?.dismiss()
+        }
+
+        settingsDialog?.show()
+
+        settingsDialog?.window?.let { window ->
+            val applyDimensions = {
+                val displayMetrics = resources.displayMetrics
+                val targetHeight = (displayMetrics.heightPixels * 0.88).toInt()
+                val targetWidth = (displayMetrics.widthPixels * 0.92).toInt()
+                window.setLayout(targetWidth, targetHeight)
+            }
+            applyDimensions()
+            dialogView.post {
+                applyDimensions()
+            }
+        }
     }
 
 
@@ -1278,7 +1299,8 @@ class MainActivity : AppCompatActivity() {
         etModel3: EditText,
         cbModel1: CheckBox,
         cbModel2: CheckBox,
-        cbModel3: CheckBox
+        cbModel3: CheckBox,
+        parentDialog: AlertDialog? = null
     ) {
         val displayItems = modelList.map { name ->
             "$name  (${getModelBadge(name)})"
@@ -1291,78 +1313,113 @@ class MainActivity : AppCompatActivity() {
             (cbModel3.isChecked && etModel3.text.toString().trim() == name)
         }
 
-        var selectionDialog: AlertDialog? = null
-        val builder = AlertDialog.Builder(this)
-            .setTitle("Chọn model dịch thuật (${modelList.size})")
-            .setMultiChoiceItems(displayItems, checkedArray) { _, which, isChecked ->
-                checkedArray[which] = isChecked
-                val count = checkedArray.count { it }
-                if (count > 3) {
-                    checkedArray[which] = false
-                    selectionDialog?.listView?.setItemChecked(which, false)
-                    Toast.makeText(this, "Chỉ được chọn tối đa 3 model!", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setPositiveButton("Áp dụng") { _, _ ->
-                val selected = modelList.filterIndexed { index, _ -> checkedArray[index] }
-                if (selected.isEmpty()) {
-                    Toast.makeText(this, "Chưa chọn model nào!", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_select_models, null)
+        val lvModels = dialogView.findViewById<ListView>(R.id.lvModels)
+        val btnQuickSelectTop3 = dialogView.findViewById<Button>(R.id.btnQuickSelectTop3)
+        val btnCancelSelection = dialogView.findViewById<Button>(R.id.btnCancelSelection)
+        val btnApplySelection = dialogView.findViewById<Button>(R.id.btnApplySelection)
 
-                etModel1.setText(selected[0])
-                cbModel1.isChecked = true
+        val adapter = android.widget.ArrayAdapter(
+            this,
+            android.R.layout.select_dialog_multichoice,
+            displayItems
+        )
+        lvModels.choiceMode = ListView.CHOICE_MODE_MULTIPLE
+        lvModels.adapter = adapter
 
-                if (selected.size > 1) {
-                    etModel2.setText(selected[1])
-                    cbModel2.isChecked = true
-                } else {
-                    cbModel2.isChecked = false
-                }
+        for (i in checkedArray.indices) {
+            lvModels.setItemChecked(i, checkedArray[i])
+        }
 
-                if (selected.size > 2) {
-                    etModel3.setText(selected[2])
-                    cbModel3.isChecked = true
-                } else {
-                    cbModel3.isChecked = false
-                }
-            }
-            .setNeutralButton("⚡ Chọn Top 3 Tối Ưu") { _, _ ->
-                if (modelList.isNotEmpty()) {
-                    etModel1.setText(modelList[0])
-                    cbModel1.isChecked = true
-                }
-                if (modelList.size > 1) {
-                    etModel2.setText(modelList[1])
-                    cbModel2.isChecked = true
-                }
-                if (modelList.size > 2) {
-                    etModel3.setText(modelList[2])
-                    cbModel3.isChecked = true
-                }
-            }
-            .setNegativeButton("Hủy", null)
-
-        selectionDialog = builder.create()
-        selectionDialog.show()
-
-        // Giảm chiều cao danh sách model để không bị che mất các button ở dưới cùng
-        selectionDialog.listView?.let { lv ->
-            lv.isVerticalScrollBarEnabled = true
-            lv.scrollBarStyle = View.SCROLLBARS_INSIDE_INSET
-            lv.post {
-                val displayMetrics = resources.displayMetrics
-                val maxListHeight = (displayMetrics.heightPixels * 0.42).toInt()
-                val lp = lv.layoutParams
-                lp.height = maxListHeight
-                lv.layoutParams = lp
-                lv.requestLayout()
+        lvModels.setOnItemClickListener { _, _, position, _ ->
+            val isChecked = lvModels.isItemChecked(position)
+            checkedArray[position] = isChecked
+            val count = checkedArray.count { it }
+            if (count > 3) {
+                checkedArray[position] = false
+                lvModels.setItemChecked(position, false)
+                Toast.makeText(this, "Chỉ được chọn tối đa 3 model!", Toast.LENGTH_SHORT).show()
             }
         }
 
-        selectionDialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(getColor(R.color.primary_indigo))
-        selectionDialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(getColor(R.color.primary_indigo_dark))
-        selectionDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(getColor(R.color.text_secondary))
+        val selectionDialog = AlertDialog.Builder(this)
+            .setTitle("Chọn model dịch thuật (${modelList.size})")
+            .setView(dialogView)
+            .create()
+
+        btnQuickSelectTop3.setOnClickListener {
+            if (modelList.isNotEmpty()) {
+                etModel1.setText(modelList[0])
+                cbModel1.isChecked = true
+            }
+            if (modelList.size > 1) {
+                etModel2.setText(modelList[1])
+                cbModel2.isChecked = true
+            }
+            if (modelList.size > 2) {
+                etModel3.setText(modelList[2])
+                cbModel3.isChecked = true
+            }
+            Toast.makeText(this, "Đã chọn 3 model tối ưu!", Toast.LENGTH_SHORT).show()
+            selectionDialog.dismiss()
+        }
+
+        btnCancelSelection.setOnClickListener {
+            selectionDialog.dismiss()
+        }
+
+        btnApplySelection.setOnClickListener {
+            val selected = modelList.filterIndexed { index, _ -> checkedArray[index] }
+            if (selected.isEmpty()) {
+                Toast.makeText(this, "Chưa chọn model nào!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            etModel1.setText(selected[0])
+            cbModel1.isChecked = true
+
+            if (selected.size > 1) {
+                etModel2.setText(selected[1])
+                cbModel2.isChecked = true
+            } else {
+                cbModel2.isChecked = false
+            }
+
+            if (selected.size > 2) {
+                etModel3.setText(selected[2])
+                cbModel3.isChecked = true
+            } else {
+                cbModel3.isChecked = false
+            }
+
+            selectionDialog.dismiss()
+        }
+
+        selectionDialog.show()
+
+        // Tăng chiều cao lên bằng chính xác dialog setting và khớp cả chiều rộng
+        selectionDialog.window?.let { window ->
+            val applyDimensions = {
+                val parentDecor = parentDialog?.window?.decorView
+                val displayMetrics = resources.displayMetrics
+                val targetHeight = if (parentDecor != null && parentDecor.height > 0) {
+                    parentDecor.height
+                } else {
+                    (displayMetrics.heightPixels * 0.88).toInt()
+                }
+                val targetWidth = if (parentDecor != null && parentDecor.width > 0) {
+                    parentDecor.width
+                } else {
+                    (displayMetrics.widthPixels * 0.92).toInt()
+                }
+                window.setLayout(targetWidth, targetHeight)
+            }
+
+            applyDimensions()
+            dialogView.post {
+                applyDimensions()
+            }
+        }
     }
 
     private fun getNextApiKey(): Pair<Int, String>? {
